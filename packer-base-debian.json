@@ -1,0 +1,212 @@
+{
+  "variables": {
+    "debian_version": "9.6.0",
+    "boot_wait": "5s",
+    "cpus": "1",
+    "disk_size": "5000",
+    "headless": "false",
+    "memory": "512",
+    "mirror": "http://mirror.host.ag/debian/debian-cd/",
+    "iso_checksum_url": "http://mirror.host.ag/debian/debian-cd/9.6.0/amd64/iso-cd/SHA512SUMS",
+    "ssh_timeout": "30m",
+    "host_adapter": null,
+    "rdp_bind_address": "127.0.0.1",
+    "must_run_tests": "false",
+    "must_sleep_before_tests": "false"
+  },
+  "provisioners": [
+    {
+      "type": "shell",
+      "scripts": [
+        "./files/base-debian/00_guest_additions.sh"
+      ],
+      "only": ["virtualbox-base-debian"]
+    },
+    {
+      "type": "shell",
+      "scripts": [
+        "./files/base-debian/00_qemu_agent.sh"
+      ],
+      "only": ["qemu-base-debian"]
+    },
+    {
+      "type": "shell",
+      "scripts": [
+        "./files/base-debian/01_ssh.sh"
+      ]
+    },
+    {
+      "type": "shell",
+      "scripts": [
+        "./files/base-debian/02_disable_lvmetad.sh"
+      ]
+    },
+    {
+      "type": "shell",
+      "scripts": [
+        "./files/base-debian/03_logging.sh"
+      ]
+    },
+    {
+      "type": "shell",
+      "scripts": [
+        "./files/cleanup.sh"
+      ]
+    },
+    {
+      "type": "shell-local",
+      "script": "./serverspec/sleep_before_tests_packer.sh",
+      "environment_vars": [
+        "MUST_SLEEP_BEFORE_TESTS={{ user `must_sleep_before_tests` }}"
+      ]
+    },
+    {
+      "type": "shell-local",
+      "command": "./serverspec/run_packer.sh ./spec/base_debian_spec.rb",
+      "environment_vars": [
+        "MUST_RUN_TESTS={{ user `must_run_tests` }}",
+        "SUDO_PASSWORD=packer123",
+        "TARGET_PASSWORD=packer123",
+        "TARGET_USER=root",
+        "BUILDER_TYPE={{ build_type }}"
+      ]
+    }
+  ],
+  "builders": [
+    {
+      "name": "virtualbox-base-debian",
+      "type": "virtualbox-iso",
+      "boot_command": [
+        "<esc><wait>",
+        "install <wait>",
+        "preseed/url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg <wait>",
+        "DEBCONF_DEBUG=5 <wait>",
+        "debian-installer=en_US <wait>",
+        "auto=true <wait>",
+        "priority=high <wait>",
+        "locale=en_US <wait>",
+        "kbd-chooser/method=us <wait>",
+        "keyboard-configuration/xkb-keymap=us <wait>",
+        "netcfg/get_hostname=debian <wait>",
+        "netcfg/get_domain=  <wait>",
+        "netcfg/choose_interface=auto  <wait>",
+        "fb=false <wait>",
+        "debconf/frontend=noninteractive <wait>",
+        "console-setup/ask_detect=false <wait>",
+        "console-keymaps-at/keymap=us <wait>",
+        "<enter><wait>"
+      ],
+      "boot_wait": "{{ user `boot_wait` }}",
+      "disk_size": "{{ user `disk_size` }}",
+      "format": "ova",
+      "guest_additions_path": "VBoxGuestAdditions_{{.Version}}.iso",
+      "guest_os_type": "Debian_64",
+      "headless": "{{ user `headless` }}",
+      "http_directory": "http",
+      "iso_checksum_type": "sha512",
+      "iso_checksum_url": "{{ user `iso_checksum_url` }}",
+      "iso_urls": [
+        "iso/debian-{{ user `debian_version` }}-amd64-netinst.iso",
+        "{{ user `mirror` }}/{{ user `debian_version` }}/amd64/iso-cd/debian-{{ user `debian_version` }}-amd64-netinst.iso"
+      ],
+      "output_directory": "output-{{ build_name }}",
+      "shutdown_command": "systemctl poweroff",
+      "ssh_password": "packer123",
+      "ssh_timeout": "{{ user `ssh_timeout` }}",
+      "ssh_username": "root",
+      "virtualbox_version_file": ".vbox_version",
+      "vrdp_bind_address": "{{ user `rdp_bind_address` }}",
+      "vboxmanage": [
+        [
+          "modifyvm",
+          "{{ .Name }}",
+          "--memory",
+          "{{ user `memory` }}"
+        ],
+        [
+          "modifyvm",
+          "{{ .Name }}",
+          "--cpus",
+          "{{ user `cpus` }}"
+        ],
+        [
+          "modifyvm",
+          "{{ .Name }}",
+          "--nic1",
+          "nat",
+          "--nictype1",
+          "virtio"
+        ],
+        [
+          "modifyvm",
+          "{{ .Name }}",
+          "--nic2",
+          "hostonly",
+          "--nictype2",
+          "virtio",
+          "--hostonlyadapter2",
+          "{{ user `host_adapter` }}"
+        ]
+      ],
+      "vm_name": "packer-{{ build_name }}"
+    },
+    {
+      "name": "qemu-base-debian",
+      "type": "qemu",
+      "accelerator": "kvm",
+      "boot_command": [
+        "<esc><wait>",
+        "install <wait>",
+        "preseed/url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/qemu-preseed.cfg <wait>",
+        "DEBCONF_DEBUG=5 <wait>",
+        "debian-installer=en_US <wait>",
+        "auto=true <wait>",
+        "priority=high <wait>",
+        "locale=en_US <wait>",
+        "kbd-chooser/method=us <wait>",
+        "keyboard-configuration/xkb-keymap=us <wait>",
+        "netcfg/get_hostname=debian <wait>",
+        "netcfg/get_domain=  <wait>",
+        "netcfg/choose_interface=auto  <wait>",
+        "fb=false <wait>",
+        "debconf/frontend=noninteractive <wait>",
+        "console-setup/ask_detect=false <wait>",
+        "console-keymaps-at/keymap=us <wait>",
+        "<enter><wait>"
+      ],
+      "boot_wait": "{{ user `boot_wait` }}",
+      "disk_cache": "writeback",
+      "disk_compression": true,
+      "disk_interface": "virtio",
+      "disk_size": "{{ user `disk_size` }}",
+      "format": "qcow2",
+      "headless": "{{ user `headless` }}",
+      "http_directory": "http",
+      "iso_checksum_type": "sha512",
+      "iso_checksum_url": "{{ user `iso_checksum_url` }}",
+      "iso_urls": [
+        "iso/debian-{{ user `debian_version` }}-amd64-netinst.iso",
+        "{{ user `mirror` }}/{{ user `debian_version` }}/amd64/iso-cd/debian-{{ user `debian_version` }}-amd64-netinst.iso"
+      ],
+      "machine_type": "pc",
+      "net_device": "virtio-net-pci",
+      "output_directory": "output-{{ build_name }}",
+      "shutdown_command": "systemctl poweroff",
+      "ssh_password": "packer123",
+      "ssh_timeout": "{{ user `ssh_timeout` }}",
+      "ssh_username": "root",
+      "vnc_bind_address": "{{ user `rdp_bind_address` }}",
+      "qemuargs": [
+        [
+          "-m",
+          "{{ user `memory` }}"
+        ],
+        [
+          "-smp",
+          "{{ user `cpus` }}"
+        ]
+      ],
+      "vm_name": "packer-{{ build_name }}"
+    }
+  ]
+}
